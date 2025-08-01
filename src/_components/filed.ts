@@ -1,4 +1,4 @@
-import { InputType, OptionType } from "./input";
+import { InputType, OptionType } from "../types/inputType";
 
 type FieldConfig = {
   label?: string;
@@ -35,9 +35,9 @@ type FieldBuilder<K extends string = string> = {
   certAwardHistory: () => FieldResult<K>;
 
   // 옵션 타입 함수
-  radio: (...options: OptionType[]) => FieldResult<K>;
-  select: (...options: OptionType[]) => FieldResult<K>;
-  checkbox: (...options: OptionType[]) => FieldResult<K>;
+  radio: (options: OptionType[]) => FieldResult<K>;
+  select: (options: OptionType[]) => FieldResult<K>;
+  checkbox: (options: OptionType[]) => FieldResult<K>;
 };
 
 export function field<K extends string>(fieldName: K): FieldBuilder<K> {
@@ -130,15 +130,15 @@ export function field<K extends string>(fieldName: K): FieldBuilder<K> {
       __config: { ...config, inputType: "cert_award_history" },
     }),
 
-    radio: (...options: OptionType[]) => ({
+    radio: (options: OptionType[]) => ({
       __key: fieldName,
       __config: { ...config, inputType: { type: "radio", options } },
     }),
-    select: (...options: OptionType[]) => ({
+    select: (options: OptionType[]) => ({
       __key: fieldName,
       __config: { ...config, inputType: { type: "select", options } },
     }),
-    checkbox: (...options: OptionType[]) => ({
+    checkbox: (options: OptionType[]) => ({
       __key: fieldName,
       __config: { ...config, inputType: { type: "checkbox", options } },
     }),
@@ -147,27 +147,45 @@ export function field<K extends string>(fieldName: K): FieldBuilder<K> {
   return builder;
 }
 
-// 필드맵 타입과 함수는 그대로 사용하면 돼
-
-type FieldMapResult = Record<string, FieldConfig | Record<string, FieldConfig>>;
+export type FieldType = {
+  label: string;
+  id: string;
+  inputType: string;
+  option?: OptionType[];
+};
+export type FieldMapResult<T extends Record<string, unknown>> = {
+  [K in keyof T]: FieldType | FieldType[];
+};
 
 export function fieldMap<T extends Record<string, unknown>>(
   data: T,
-  ...fields: FieldResult<keyof T & string>[]
-): FieldMapResult {
-  return fields.reduce<FieldMapResult>((acc, field) => {
+  ...fields: FieldResult<Extract<keyof T, string>>[]
+): FieldMapResult<T> {
+  return fields.reduce<FieldMapResult<T>>((acc, field) => {
     const { __key, __config } = field;
     const value = data[__key];
+    const input = __config.inputType;
 
     if (Array.isArray(value)) {
-      const arrayItems = Object.fromEntries(
-        value.map((_, i) => [`${__key}[${i}]`, { ...__config }])
-      );
-      acc[__key] = arrayItems;
+      acc[__key] = value.map((_, i) => ({
+        id: `${__key}[${i}]`,
+        label: __config.label ?? "",
+        inputType: typeof input === "string" ? input : input?.type ?? "",
+        ...(typeof input === "object" && input?.options
+          ? { option: input.options }
+          : {}),
+      }));
     } else {
-      acc[__key] = { ...__config };
+      acc[__key] = {
+        id: __key,
+        label: __config.label ?? "",
+        inputType: typeof input === "string" ? input : input?.type ?? "",
+        ...(typeof input === "object" && input?.options
+          ? { option: input.options }
+          : {}),
+      };
     }
 
     return acc;
-  }, {});
+  }, {} as FieldMapResult<T>);
 }
